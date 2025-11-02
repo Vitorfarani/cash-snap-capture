@@ -35,33 +35,41 @@ const Index = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [authChecking, setAuthChecking] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        if (!mounted) return;
         setSession(session);
         setUser(session?.user ?? null);
-        
-        if (!session) {
-          navigate("/auth");
-        }
+        setAuthChecking(false);
       }
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
       setSession(session);
       setUser(session?.user ?? null);
-      
-      if (!session) {
-        navigate("/auth");
-      }
+      setAuthChecking(false);
     });
 
-    return () => subscription.unsubscribe();
-  }, [navigate]);
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authChecking && !user && !session) {
+      navigate("/auth");
+    }
+  }, [authChecking, user, session, navigate]);
 
   useEffect(() => {
     if (user) {
@@ -121,6 +129,16 @@ const Index = () => {
     setFormOpen(false);
     setEditingTransaction(null);
   };
+
+  if (authChecking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-center">
+          <p className="text-muted-foreground">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return null;
