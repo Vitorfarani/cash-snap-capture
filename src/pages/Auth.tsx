@@ -8,6 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { DollarSign } from "lucide-react";
+import { signInSchema, signUpSchema } from "@/lib/validationSchemas";
+import { getErrorMessage } from "@/lib/errorHandling";
+import { z } from "zod";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -31,9 +34,12 @@ const Auth = () => {
     setLoading(true);
 
     try {
+      // Validate input
+      const validatedData = signInSchema.parse({ email, password });
+
       const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: validatedData.email,
+        password: validatedData.password,
       });
 
       if (error) throw error;
@@ -41,7 +47,11 @@ const Auth = () => {
       toast.success("Login realizado com sucesso!");
       navigate("/");
     } catch (error: any) {
-      toast.error(error.message || "Erro ao fazer login");
+      if (error instanceof z.ZodError) {
+        toast.error(error.errors[0].message);
+      } else {
+        toast.error(getErrorMessage(error));
+      }
     } finally {
       setLoading(false);
     }
@@ -52,12 +62,19 @@ const Auth = () => {
     setLoading(true);
 
     try {
+      // Validate input
+      const validatedData = signUpSchema.parse({ 
+        fullName, 
+        email, 
+        password 
+      });
+
       const { error } = await supabase.auth.signUp({
-        email,
-        password,
+        email: validatedData.email,
+        password: validatedData.password,
         options: {
           data: {
-            full_name: fullName,
+            full_name: validatedData.fullName,
           },
           emailRedirectTo: `${window.location.origin}/`,
         },
@@ -67,7 +84,11 @@ const Auth = () => {
 
       toast.success("Conta criada com sucesso! Você já pode fazer login.");
     } catch (error: any) {
-      toast.error(error.message || "Erro ao criar conta");
+      if (error instanceof z.ZodError) {
+        toast.error(error.errors[0].message);
+      } else {
+        toast.error(getErrorMessage(error));
+      }
     } finally {
       setLoading(false);
     }

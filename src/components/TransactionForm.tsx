@@ -13,6 +13,9 @@ import { CalendarIcon, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { createWorker } from "tesseract.js";
+import { transactionSchema } from "@/lib/validationSchemas";
+import { getErrorMessage } from "@/lib/errorHandling";
+import { z } from "zod";
 
 interface Transaction {
   id?: string;
@@ -114,13 +117,22 @@ const TransactionForm = ({ open, onOpenChange, transaction, onSuccess, userId }:
     setLoading(true);
 
     try {
-      const transactionData = {
-        user_id: userId,
+      // Validate input
+      const validatedData = transactionSchema.parse({
         type,
         amount: parseFloat(amount),
-        date: format(date, "yyyy-MM-dd"),
+        date,
         description,
-        category: category || null,
+        category: category || undefined,
+      });
+
+      const transactionData = {
+        user_id: userId,
+        type: validatedData.type,
+        amount: validatedData.amount,
+        date: format(validatedData.date, "yyyy-MM-dd"),
+        description: validatedData.description,
+        category: validatedData.category || null,
       };
 
       if (transaction?.id) {
@@ -143,7 +155,11 @@ const TransactionForm = ({ open, onOpenChange, transaction, onSuccess, userId }:
       onSuccess();
       onOpenChange(false);
     } catch (error: any) {
-      toast.error(error.message || "Erro ao salvar transação");
+      if (error instanceof z.ZodError) {
+        toast.error(error.errors[0].message);
+      } else {
+        toast.error(getErrorMessage(error));
+      }
     } finally {
       setLoading(false);
     }
@@ -204,6 +220,7 @@ const TransactionForm = ({ open, onOpenChange, transaction, onSuccess, userId }:
                 type="number"
                 step="0.01"
                 min="0.01"
+                max="999999999.99"
                 placeholder="0.00"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -242,6 +259,7 @@ const TransactionForm = ({ open, onOpenChange, transaction, onSuccess, userId }:
               placeholder="Ex: Compras no supermercado"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              maxLength={500}
               required
             />
           </div>

@@ -89,7 +89,6 @@ const Index = () => {
       setTransactions(data || []);
     } catch (error: any) {
       toast.error("Erro ao carregar transações");
-      console.error(error);
     } finally {
       setLoading(false);
     }
