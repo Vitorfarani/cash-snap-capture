@@ -84,11 +84,37 @@ const TransactionForm = ({ open, onOpenChange, transaction, onSuccess, userId }:
       const { data: { text } } = await worker.recognize(file);
       await worker.terminate();
 
-      // Extract amount (looking for patterns like R$ 123,45 or 123.45)
-      const amountMatch = text.match(/R\$?\s*(\d+)[.,](\d{2})/i);
-      if (amountMatch) {
-        setAmount(`${amountMatch[1]}.${amountMatch[2]}`);
+    // Extract amount - try multiple patterns common in Brazilian receipts
+    let extractedAmount = null;
+    
+    // Pattern 1: R$ 1.234,56 or R$ 123,45
+    const brazilianPattern = text.match(/R\$?\s*([\d.]+),(\d{2})/i);
+    if (brazilianPattern) {
+      const cleanValue = brazilianPattern[1].replace(/\./g, '');
+      extractedAmount = `${cleanValue}.${brazilianPattern[2]}`;
+    }
+    
+    // Pattern 2: Look for TOTAL, VALOR, or similar keywords followed by amount
+    if (!extractedAmount) {
+      const totalPattern = text.match(/(?:total|valor|subtotal|r\$)[\s:]*?([\d.]+),(\d{2})/i);
+      if (totalPattern) {
+        const cleanValue = totalPattern[1].replace(/\./g, '');
+        extractedAmount = `${cleanValue}.${totalPattern[2]}`;
       }
+    }
+    
+    // Pattern 3: Just look for any number with comma (last resort)
+    if (!extractedAmount) {
+      const anyNumberPattern = text.match(/([\d.]+),(\d{2})/);
+      if (anyNumberPattern) {
+        const cleanValue = anyNumberPattern[1].replace(/\./g, '');
+        extractedAmount = `${cleanValue}.${anyNumberPattern[2]}`;
+      }
+    }
+    
+    if (extractedAmount) {
+      setAmount(extractedAmount);
+    }
 
       // Extract date (looking for patterns like 01/01/2024 or 01-01-2024)
       const dateMatch = text.match(/(\d{2})[/-](\d{2})[/-](\d{4})/);
