@@ -87,8 +87,8 @@ const TransactionForm = ({ open, onOpenChange, transaction, onSuccess, userId }:
     // Extract amount - try multiple patterns for Brazilian currency format
     let extractedAmount = null;
     
-    // Pattern 1: R$ followed by amount (any value: 0,01 | 0,60 | 1.234,56 | etc.)
-    const withCurrencySymbol = text.match(/R\$\s*(\d+(?:\.\d{3})*),(\d{2})/i);
+    // Pattern 1: R$ followed by amount (any value from cents to millions)
+    const withCurrencySymbol = text.match(/R\$\s*(\d{1,3}(?:\.\d{3})*|\d+),(\d{2})/i);
     if (withCurrencySymbol) {
       const cleanValue = withCurrencySymbol[1].replace(/\./g, '');
       extractedAmount = `${cleanValue}.${withCurrencySymbol[2]}`;
@@ -96,7 +96,7 @@ const TransactionForm = ({ open, onOpenChange, transaction, onSuccess, userId }:
     
     // Pattern 2: Keywords (TOTAL, VALOR, etc.) followed by amount
     if (!extractedAmount) {
-      const withKeyword = text.match(/(?:total|valor|subtotal|pagar|pagamento|preco|preço)[\s:R$]*(\d+(?:\.\d{3})*),(\d{2})/i);
+      const withKeyword = text.match(/(?:total|valor|subtotal|pagar|pagamento|preco|preço)[\s:R$]*(\d{1,3}(?:\.\d{3})*|\d+),(\d{2})/i);
       if (withKeyword) {
         const cleanValue = withKeyword[1].replace(/\./g, '');
         extractedAmount = `${cleanValue}.${withKeyword[2]}`;
@@ -105,7 +105,7 @@ const TransactionForm = ({ open, onOpenChange, transaction, onSuccess, userId }:
     
     // Pattern 3: Any number with comma and exactly 2 decimal places (last resort)
     if (!extractedAmount) {
-      const anyAmount = text.match(/(\d+(?:\.\d{3})*),(\d{2})/);
+      const anyAmount = text.match(/(\d{1,3}(?:\.\d{3})*|\d+),(\d{2})/);
       if (anyAmount) {
         const cleanValue = anyAmount[1].replace(/\./g, '');
         extractedAmount = `${cleanValue}.${anyAmount[2]}`;
