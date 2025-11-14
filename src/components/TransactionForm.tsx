@@ -84,38 +84,56 @@ const TransactionForm = ({ open, onOpenChange, transaction, onSuccess, userId }:
       const { data: { text } } = await worker.recognize(file);
       await worker.terminate();
 
-    // Extract amount - try multiple patterns for Brazilian currency format
-    let extractedAmount = null;
-    
-    // Pattern 1: R$ followed by amount (any value from cents to millions)
-    const withCurrencySymbol = text.match(/R\$\s*(\d{1,3}(?:\.\d{3})*|\d+),(\d{2})/i);
-    if (withCurrencySymbol) {
-      const cleanValue = withCurrencySymbol[1].replace(/\./g, '');
-      extractedAmount = `${cleanValue}.${withCurrencySymbol[2]}`;
-    }
-    
-    // Pattern 2: Keywords (TOTAL, VALOR, etc.) followed by amount
-    if (!extractedAmount) {
-      const withKeyword = text.match(/(?:total|valor|subtotal|pagar|pagamento|preco|preço)[\s:R$]*(\d{1,3}(?:\.\d{3})*|\d+),(\d{2})/i);
-      if (withKeyword) {
-        const cleanValue = withKeyword[1].replace(/\./g, '');
-        extractedAmount = `${cleanValue}.${withKeyword[2]}`;
-      }
-    }
-    
-    // Pattern 3: Any number with comma and exactly 2 decimal places (last resort)
-    if (!extractedAmount) {
-      const anyAmount = text.match(/(\d{1,3}(?:\.\d{3})*|\d+),(\d{2})/);
-      if (anyAmount) {
-        const cleanValue = anyAmount[1].replace(/\./g, '');
-        extractedAmount = `${cleanValue}.${anyAmount[2]}`;
-      }
-    }
-    
-    if (extractedAmount) {
-      setAmount(extractedAmount);
+    // Extract amount with robust OCR-aware parsing (BR format)
+    let extractedAmount: string | null = null;
+
+    // Normalize common OCR issues
+    let norm = text;
+    // Normalize currency symbol variants (R$, RS, R$ with OCR mistakes)
+    norm = norm.replace(/R[\$S5]/g, 'R$');
+    // Fix spaces around decimal separators like "1.234 ,56" or "12 , 90"
+    norm = norm.replace(/(\d)\s+([,\.])\s*(\d{2})/g, '$1$2$3');
+    // Fix frequent OCR digit confusions between digits
+    norm = norm.replace(/(\d)[Oo](\d)/g, '$10$2');
+    norm = norm.replace(/(\d)[Ss](\d)/g, '$15$2');
+    norm = norm.replace(/(\d)[Bb](\d)/g, '$18$2');
+    norm = norm.replace(/(\d)[Il](\d)/g, '$11$2');
+
+    // Collect all candidate amounts
+    const amountRegex = /(?:R\$\s*)?(\d{1,3}(?:[.\s]\d{3})*|\d+)[,\.](\d{2})/g;
+    type Candidate = { valueNum: number; valueStr: string; score: number; index: number };
+    const candidates: Candidate[] = [];
+    let m: RegExpExecArray | null;
+
+    while ((m = amountRegex.exec(norm)) !== null) {
+      const whole = m[1].replace(/[.\s]/g, '');
+      const decimals = m[2];
+      const valueStr = `${whole}.${decimals}`;
+      const valueNum = parseFloat(valueStr);
+
+      const contextStart = Math.max(0, m.index - 40);
+      const contextEnd = Math.min(norm.length, amountRegex.lastIndex + 40);
+      const around = norm.slice(contextStart, contextEnd).toLowerCase();
+
+      let score = 0;
+      if (around.match(/total|valor total|total geral|a pagar|pagar|pagamento|subtotal/)) score += 3;
+      // Currency symbol nearby
+      const near = norm.slice(Math.max(0, m.index - 3), Math.min(norm.length, m.index + 3));
+      if (/R\$/i.test(near)) score += 2;
+
+      candidates.push({ valueNum, valueStr, score, index: m.index });
     }
 
+    if (candidates.length) {
+      const maxVal = Math.max(...candidates.map(c => c.valueNum));
+      // Slightly favor the largest amount
+      for (const c of candidates) {
+        if (c.valueNum === maxVal) c.score += 1;
+      }
+      candidates.sort((a, b) => b.score - a.score || b.index - a.index);
+      extractedAmount = candidates[0].valueStr;
+      setAmount(extractedAmount);
+    }
       // Extract date (looking for patterns like 01/01/2024 or 01-01-2024)
       const dateMatch = text.match(/(\d{2})[/-](\d{2})[/-](\d{4})/);
       if (dateMatch) {
